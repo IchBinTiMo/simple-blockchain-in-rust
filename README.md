@@ -1,0 +1,1 @@
+just a simple blockchain in rust. Inspired by [@nosequeldeebee](https://github.com/nosequeldeebee/blockchain-tutorial/tree/master).
