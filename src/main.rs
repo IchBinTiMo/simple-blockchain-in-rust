@@ -1,46 +1,36 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
-use std::sync::{Arc, Mutex};
+use actix_web::{web, App, HttpServer};
+use block::Block;
+use blockchain::Blockchain;
+use dotenv::dotenv;
+use once_cell::sync::Lazy;
+use std::{env, sync::{mpsc, Arc, Mutex}};
+use api::{get_chain, add, hello};
 
 mod block;
 mod blockchain;
+mod api;
 
-use crate::blockchain::Blockchain;
 
-type SharedBlockChain = Arc<Mutex<Blockchain>>;
+// type SharedBlockChain = Arc<Mutex<Blockchain>>;
 
-// Backend
-#[get ("/")]
-async fn get_chain(blockchain: web::Data<SharedBlockChain>) -> impl Responder {
-    if let Ok(chain) = blockchain.lock() {
-        HttpResponse::Ok().json(chain.get_chain())
-    } else {
-        println!("Failed to lock blockchain");
-        HttpResponse::BadRequest().body("Failed to lock blockchain")
-    }
-}
+static BC_SERVER: Lazy<(mpsc::Sender<Block>, Mutex<mpsc::Receiver<Block>>)> = Lazy::new(|| {
+    let (tx, rx) = mpsc::channel();
+    (tx, Mutex::new(rx))
+});
 
-#[get ("/hello")]
-async fn hello() -> impl Responder {
-    HttpResponse::Ok().body("Hello world!")
-}
-
-#[post ("/add_block")]
-async fn add(data: web::Json<i32>, blockchain: web::Data<SharedBlockChain>) -> impl Responder {
-    if let Ok(mut chain) = blockchain.lock() {
-        let data: i32 = data.into_inner();
-        match chain.add_block(data) {
-            Ok(msg) => HttpResponse::Ok().body(msg.to_string()),
-            Err(msg) => HttpResponse::BadRequest().body(msg.to_string())
-        }
-    } else {
-        println!("Failed to lock blockchain");
-        HttpResponse::BadRequest().body("Failed to lock blockchain")
-    }
-}
 
 #[actix_web::main]
 async fn main() ->std::io::Result<()> {
-    let blockchain = Arc::new(Mutex::new(Blockchain::new()));
+    let blockchain: Arc<Mutex<Blockchain>> = Arc::new(Mutex::new(Blockchain::new()));
+
+    dotenv().ok();
+
+    let ip: String = env::var("IP").unwrap_or("127.0.0.1".to_string());
+    let port: String = env::var("PORT").unwrap_or("8080".to_string());
+
+    let addr: String = format!("{}:{}", ip, port);
+
+    println!("{addr}");
 
     HttpServer::new(move || {
         App::new()
